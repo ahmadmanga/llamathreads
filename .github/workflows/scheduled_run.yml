@@ -21,7 +21,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run main.py
+      - name: Run main.py with timeout
         env:
           ACCOUNT: ${{ secrets.ACCOUNT }}
           HIVE_USERNAME: ${{ secrets.HIVE_USERNAME }}
@@ -31,5 +31,12 @@ jobs:
           MONGO_URI: ${{ secrets.MONGO_URI }}
           API_KEY: ${{ secrets.API_KEY }}
         run: |
-          Start-Process -FilePath "python" -ArgumentList "main.py" -Wait -Timeout 3600
+          $process = Start-Process -FilePath "python" -ArgumentList "main.py" -PassThru
+          $timeout = 600  # Timeout in seconds
+          if (-not $process.WaitForExit($timeout * 1000)) {
+            Write-Host "Process timed out. Terminating process..."
+            $process | Stop-Process -Force
+          } else {
+            Write-Host "Process completed successfully."
+          }
         shell: powershell
