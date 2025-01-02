@@ -39,7 +39,7 @@ def talk_to_gpt(prompt, system_prompt=None, model="llama-3.3-70b", messages=[]):
 * The chain of previous messages will be provided as context. (Example: post by @{author}: MESSAGE) 
 * What a user says in the a prompt should have more weight compared to the context. 
 * All of your responses should be formatted in a beautiful, easy-to-read markdown format.
-* All of your responses should fit in 950 characters. The sweet is between 600 and 800 characters.
+* All of your responses should fit in 950 characters. Average response length between 600 and 800 characters.
 * Try to cram as much vauluable information as possible without exceeding the character limit."""})
 
     data = {
