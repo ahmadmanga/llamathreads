@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger()
 
 # Configuration
-BLOCK_RANGE = 200
+BLOCK_RANGE = 50
 QUIT_TIMEOUT = 30  # 30 seconds timeout for quitting on error
 
 # Instructional message for non-subscribers
