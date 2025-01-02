@@ -31,4 +31,4 @@ jobs:
           MONGO_URI: ${{ secrets.MONGO_URI }}
           API_KEY: ${{ secrets.API_KEY }}
         run: |
-          timeout 10m python main.py
+          cmd /c "timeout /t 600 python main.py"
