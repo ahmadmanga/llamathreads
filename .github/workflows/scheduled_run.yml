@@ -6,7 +6,7 @@ on:
 
 jobs:
   run-main:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -22,5 +22,13 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run main.py
+        env:
+          ACCOUNT: ${{ secrets.ACCOUNT }}
+          HIVE_USERNAME: ${{ secrets.HIVE_USERNAME }}
+          POSTING_KEY: ${{ secrets.POSTING_KEY }}
+          ACTIVE_KEY: ${{ secrets.ACTIVE_KEY }}
+          CREATOR_SUB_ACC: ${{ secrets.CREATOR_SUB_ACC }}
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          API_KEY: ${{ secrets.API_KEY }}
         run: |
           timeout 10m python main.py
