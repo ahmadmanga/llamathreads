@@ -31,4 +31,4 @@ jobs:
           MONGO_URI: ${{ secrets.MONGO_URI }}
           API_KEY: ${{ secrets.API_KEY }}
         run: |
-          cmd /c "timeout /t 600 python main.py"
+          powershell -Command "Start-Process -FilePath 'python' -ArgumentList 'main.py' -Wait -Timeout 600"
