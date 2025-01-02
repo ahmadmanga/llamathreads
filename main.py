@@ -44,6 +44,13 @@ def main():
     # Start listening for comments
     while True:
         try:
+            # Check if the last block is already the latest block
+            if last_block > latest_block_num:
+                logger.info("Last block is greater than the latest block. Exiting the application.")
+                save_last_block(last_block)
+                break
+
+            # Fetch comments within the valid block range
             comments = listen_for_comments(last_block, end_block)
             for comment in comments:
                 print(f"Fetched comment by @{comment['author']} on {comment['block_timestamp']}: {comment['body']}")

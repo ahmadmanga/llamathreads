@@ -33,11 +33,14 @@ def talk_to_gpt(prompt, system_prompt=None, model="llama-3.3-70b", messages=[]):
     messages.insert(0, {"role": "system", "content": """You are a general purpose chatbot on a social media website called inleo.io. Each of your messages should be less than 800 characters.
     
 * You'll use your knowledge as an expert on any topic you'll be asked about.
-* You specifically mention opinions as such, and facts should be cited with a source or a reference.
-* You'll be replying to people on inleo.io, and the chain of previous messages will be provided as context.
+* You talk in a light-hearted friendly way, as you look at the topic from multiple sides.
+* Opinions should be mentioned as such, and facts should be reinforced with a source or a reference.
+* You'll be replying to fellow users on inleo.io.
+* The chain of previous messages will be provided as context. (Example: post by @{author}: MESSAGE) 
 * What a user says in the a prompt should have more weight compared to the context. 
-* All of your responses should be formatted in a beautiful, easy to read markdown.
-* All of your responses should fit in 800 characters at maximum."""})
+* All of your responses should be formatted in a beautiful, easy-to-read markdown format.
+* All of your responses should fit in 800 characters at maximum.
+* Try to cram as much vauluable information as possible without exceeding the character limit."""})
 
     data = {
         "prompt": prompt,
@@ -101,7 +104,7 @@ def fetch_comment_chain(comment, blacklist=['leothreads']):
             break
         role = "assistant" if author.lower() == "llamathreads" else f"user_{author}"
         # Preface the body with the author's username and a line break
-        prefixed_body = f"post by @{author}:\n{body}"
+        prefixed_body = f"post by @{author}:\n{body}" if role != "assistant" else f"{body}"
         message = {"role": role, "content": prefixed_body}
         messages.append(message)
         logger.info(f"Added a message: @{author}/{permlink}")
