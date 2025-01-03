@@ -321,6 +321,3 @@ def list_all_users():
     all_users = list(set(subscribers + buyers))
     print(all_users)
     return all_users
-
-if __name__ == "__main__":
-    list_all_users()
