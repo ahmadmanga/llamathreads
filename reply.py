@@ -177,7 +177,7 @@ def fetch_comment_chain(comment, blacklist=['leothreads']):
     # Trim messages to ensure the combined length is within 11000 characters
     while True:
         total_length = sum(len(msg['content']) for msg in messages)
-        if total_length <= 11000:
+        if total_length <= 12000:
             break
         # Remove the oldest message
         removed_message = messages.pop(0)
