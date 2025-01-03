@@ -1,29 +1,27 @@
 import requests
 import time
-from pymongo import MongoClient
 from dotenv import load_dotenv
 import os
 import re
 from beem import Hive
 from beem.comment import Comment
 from beem.exceptions import ContentDoesNotExistsException
+from supabase import create_client
 
-load_dotenv()  # Load MongoDB connection details from environment variables
-MONGO_URI = os.getenv('MONGO_URI')
-DATABASE_NAME = 'llama_threads'  # New database name
-COLLECTION_NAME = 'blocks'  # New collection name
+load_dotenv()  # Load environment variables from .env file
 
-# Initialize MongoDB client
-client = MongoClient(MONGO_URI)
-db = client[DATABASE_NAME]
-collection = db[COLLECTION_NAME]
+# Load Supabase connection details from environment variables
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+
+# Initialize Supabase client
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 HIVE_API = [
     'https://api.hive.blog',
     'https://api.deathwing.me',
     'https://api.openhive.network'
 ]
-
 SLEEP_INTERVAL = 5
 
 def get_latest_block_num():
@@ -92,19 +90,15 @@ def get_block_range(start_block, end_block):
     raise Exception("Failed to fetch block data after multiple retries.")
 
 def load_last_block():
-    """Load the last processed block number from MongoDB."""
-    doc = collection.find_one({'_id': 'last_block'})
-    if doc:
-        return doc.get('block_num')
+    """Load the last processed block number from Supabase."""
+    response = supabase.table('blocks').select('block_num').eq('_id', 'last_block').execute()
+    if response.data:
+        return response.data[0]['block_num']
     return None
 
 def save_last_block(block_num):
-    """Save the last processed block number to MongoDB."""
-    collection.update_one(
-        {'_id': 'last_block'},
-        {'$set': {'block_num': block_num}},
-        upsert=True
-    )
+    """Save the last processed block number to Supabase."""
+    response = supabase.table('blocks').upsert({'_id': 'last_block', 'block_num': block_num}).execute()
     print(f"Saved last block: {block_num}")
 
 def listen_for_comments(start_block, end_block):
