@@ -34,19 +34,17 @@ URL_REGEX = re.compile(r'https://inleo.io/threads/(?:view/)?(\w+)/([-.\w]+)(?:\?
 
 def talk_to_gpt(prompt, system_prompt=None, model="llama-3.3-70b", messages=[], max_retries=3, timeout=90):
     if system_prompt is None:
-        system_prompt = """You are a general purpose chatbot on a social media website called inleo.io. Each of your messages should be less than 950 characters. Average the length between 600 and 800 characters.
+        system_prompt = """You are a general purpose chatbot on a social media website called inleo.io. Each of your messages should be less than 999 characters. Try to adjust to the sweet spot of 700 to 850 characters.
 * You'll use your knowledge as an expert on any topic you'll be asked about. 
 * You talk in a light-hearted friendly way, as you look at the topic from multiple sides. 
 * Opinions should be mentioned as such, and facts should be reinforced with a source or a reference. 
 * You'll be replying to fellow users on inleo.io. 
-* The chain of previous messages will be provided as context. (Example: post by @{author}: MESSAGE) 
+* The chain of previous messages will be provided as context. (Example: post by @{author}: MESSAGE)
+* The content of some links will be provided to you in as a unique message.
 * What a user says in the prompt should have more weight compared to the context. 
-* All of your responses should be formatted in a beautiful, easy-to-read markdown format. 
-* All of your responses should fit in 950 characters. 
-* Try to cram as much valuable information as possible without exceeding the character limit."""
-    
+* All of your responses should be formatted in a beautiful, easy-to-read markdown format.  
+* Try to cram as much valuable information as possible without exceeding the 999 characters limit."""
     messages.insert(0, {"role": "system", "content": system_prompt})
-    
     for attempt in range(1, max_retries + 1):
         try:
             data = {
@@ -80,7 +78,6 @@ def talk_to_gpt(prompt, system_prompt=None, model="llama-3.3-70b", messages=[], 
                 logger.warning(f"Request timed out after {timeout} seconds. Attempt {attempt}.")
             else:
                 logger.error(f"An error occurred: {e}. Attempt {attempt}.")
-    
     logger.error("All attempts failed to get a valid response.")
     return None
 
@@ -115,7 +112,10 @@ def fetch_referenced_comments(message_body, referencing_author):
         try:
             referenced_comment = Comment(f"@{referenced_author}/{permlink}")
             referenced_body = referenced_comment.get('body', '')
-            prefixed_body = f"@{referencing_author} referenced a post by @{referenced_author}:\n{referenced_body}"
+            # Construct the URL
+            referenced_url = f"https://inleo.io/threads/view/{referenced_author}/{permlink}"
+            # Preface the body with the URL and the referencing author
+            prefixed_body = f"content for {referenced_url}: @{referencing_author} referenced a post by @{referenced_author}:\n{referenced_body}"
             referenced_messages.append({"role": "user", "content": prefixed_body})
             logger.info(f"Referenced message added for @{referenced_author}/{permlink} by @{referencing_author}")
         except MissingKeyError:
@@ -140,11 +140,9 @@ def fetch_comment_chain(comment, blacklist=['leothreads']):
         message = {"role": role, "content": prefixed_body}
         messages.append(message)
         logger.info(f"Added a message: @{author}/{permlink}")
-        
         # Fetch referenced comments
         referenced_messages = fetch_referenced_comments(body, author)
         messages.extend(referenced_messages)
-        
         # Check if the current comment is a blog post (no parent author or parent permlink)
         parent_author = current_comment.get('parent_author', '')
         parent_permlink = current_comment.get('parent_permlink', '')
