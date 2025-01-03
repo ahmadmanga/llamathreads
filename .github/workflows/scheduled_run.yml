@@ -28,7 +28,8 @@ jobs:
           POSTING_KEY: ${{ secrets.POSTING_KEY }}
           ACTIVE_KEY: ${{ secrets.ACTIVE_KEY }}
           CREATOR_SUB_ACC: ${{ secrets.CREATOR_SUB_ACC }}
-          MONGO_URI: ${{ secrets.MONGO_URI }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           API_KEY: ${{ secrets.API_KEY }}
         run: |
           python main.py
