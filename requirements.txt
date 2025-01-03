@@ -1,5 +1,5 @@
 beem==0.24.26
 pymongo==4.8.0
 python-dotenv==1.0.1
-psycopg2-binary=2.9.10
+supabase=2.11.0
 Requests==2.32.3
