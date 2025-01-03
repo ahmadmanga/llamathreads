@@ -115,7 +115,7 @@ def fetch_referenced_comments(message_body, referencing_author):
             # Construct the URL
             referenced_url = f"https://inleo.io/threads/view/{referenced_author}/{permlink}"
             # Preface the body with the URL and the referencing author
-            prefixed_body = f"content for {referenced_url}: @{referencing_author} referenced a post by @{referenced_author}:\n{referenced_body}"
+            prefixed_body = f"@{referencing_author} shared this {referenced_url} by @{referenced_author}\nLink's content:\n{referenced_body}"
             referenced_messages.append({"role": "user", "content": prefixed_body})
             logger.info(f"Referenced message added for @{referenced_author}/{permlink} by @{referencing_author}")
         except MissingKeyError:
