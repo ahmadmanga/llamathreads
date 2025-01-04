@@ -294,7 +294,7 @@ def get_latest_author_comment(username):
         "params": {
             "account": username,
             "start": -1,
-            "limit": 1,  # Adjust limit as needed
+            "limit": 1000,  # Adjust limit as needed
             "operation_filter_low": 2  # 2 means a comment operation
         },
         "id": 1
