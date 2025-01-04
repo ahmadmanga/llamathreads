@@ -34,12 +34,15 @@ def main():
     all_users = list_all_users()
     logger.info("Subscribers list generated.")
 
-    # Call the container_thread_creator function
-    logger.info("Starting container_thread_creator...")
-    start_time = datetime.now()
-    container_thread_creator()
-    end_time = datetime.now()
-    logger.info(f"Container thread creation attempted. Duration: {end_time - start_time}")
+    # Call the container_thread_creator function with error handling
+    try:
+        logger.info("Starting container_thread_creator...")
+        start_time = datetime.now()
+        container_thread_creator()
+        end_time = datetime.now()
+        logger.info(f"Container thread creation attempted. Duration: {end_time - start_time}")
+    except Exception as e:
+        logger.error(f"Error in container_thread_creator: {e}")
 
     # Start listening for comments
     while True:
