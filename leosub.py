@@ -1,3 +1,4 @@
+# Import necessary modules
 import os
 import logging
 import requests
@@ -41,6 +42,7 @@ account = Account(ACCOUNT, blockchain_instance=hive)
 SUBSCRIPTION_ADD_MESSAGE = "Thank you @{} for subscribing to `llamathreads`. Your subscription starts at {} and ends at {}!"
 SUBSCRIPTION_REMOVE_MESSAGE = "Your subscription to `llamathreads` has ended. Thanks for the conversations! Feel free to subscribe again. [Usage Instructions](https://inleo.io/threads/view/llamathreads/re-leothreads-2tychfjaq?referral=llamathreads)"
 
+# Function to check if API node is valid
 def is_valid_api_node(api_node):
     try:
         payload = {
@@ -103,9 +105,7 @@ def process_transfers(data, subscription_payment_account, creator_sub_acc):
     return valid_transfers, invalid_transfers
 
 # Function to update subscribers in Supabase
-def update_subscribers(valid_transfers):
-    current_time = datetime.utcnow()
-    thirty_one_days_ago = current_time - timedelta(days=31)
+def update_subscribers(valid_transfers, current_time, thirty_one_days_ago):
     # Delete old subscribers
     supabase.table('subscribers').delete().lt('timestamp', thirty_one_days_ago.isoformat()).execute()
     # Update or insert new subscribers
@@ -115,31 +115,51 @@ def update_subscribers(valid_transfers):
             'timestamp': transfer['timestamp'].isoformat()
         }
         # Check if the username already exists
-        existing_subscriber = supabase.table('subscribers').select('*').eq('username', transfer['username']).execute().data
-        if existing_subscriber:
+        if transfer['username'] in subscribers_set:
             # If the username exists, update the timestamp
             supabase.table('subscribers').update({'timestamp': transfer['timestamp'].isoformat()}).eq('username', transfer['username']).execute()
         else:
             # Otherwise, insert the new subscriber
             supabase.table('subscribers').insert(subscriber_data).execute()
+            subscribers_set.add(transfer['username'])
 
 # Function to get the list of subscribers
 def subscribers_list(subscription_payment_account, creator_sub_acc):
-    global HIVE_API_NODES
+    global HIVE_API_NODES, subscribers_set, freetrial_set
     if not is_valid_api_node(HIVE_API_NODES[0]):
         logger.warning(f'Using default API node {DEFAULT_API_NODE} as {HIVE_API_NODES[0]} is not responsive.')
         HIVE_API_NODES = [DEFAULT_API_NODE]
+    
+    # Fetch all subscribers and freetrial data
+    subscribers_data = supabase.table('subscribers').select('*').execute().data
+    freetrial_data = supabase.table('freetrial').select('*').execute().data
+    
+    # Create sets for quick lookup
+    subscribers_set = {subscriber['username'] for subscriber in subscribers_data}
+    freetrial_set = {free_trial['username'] for free_trial in freetrial_data}
+    
     data = fetch_account_history(subscription_payment_account)
     valid_transfers, invalid_transfers = process_transfers(data, subscription_payment_account, creator_sub_acc)
+    current_time = datetime.utcnow()
+    thirty_one_days_ago = current_time - timedelta(days=31)
+    update_subscribers(valid_transfers, current_time, thirty_one_days_ago)
+    
     for invalid_transfer in invalid_transfers:
         logger.info(f"Invalid subscription for user {invalid_transfer['username']} - Off by {invalid_transfer['days_off']} days")
-    update_subscribers(valid_transfers)
-    subscribers = supabase.table('subscribers').select('*').execute().data
-    free_trials = supabase.table('freetrial').select('*').execute().data
-    all_users = [subscriber['username'] for subscriber in subscribers] + [free_trial['username'] for free_trial in free_trials]
-    all_users = list(set(all_users))
+    
+    all_users = list(subscribers_set | freetrial_set)
     logger.info(f'Total users with valid subscriptions or free trial: {len(all_users)}')
     return all_users
+
+# Function to fetch all processed transfers from Supabase
+def fetch_processed_transfers():
+    try:
+        response = supabase.table('processed_transfers').select('*').execute()
+        processed_txs = {tx['tx_id'] for tx in response.data}
+        return processed_txs
+    except Exception as e:
+        logger.error(f'Error fetching processed transfers from Supabase: {e}')
+        return set()
 
 # Function to add buyers
 def add_buyers():
@@ -149,8 +169,17 @@ def add_buyers():
     limit = 1000
     start = -1
     valid_buyers = []
+    
+    # Fetch all processed transfers at the start
+    processed_txs = fetch_processed_transfers()
+    
+    # Fetch all buyers data
+    buyers_data = supabase.table('buyers').select('*').execute().data
+    buyers_set = {buyer['username']: buyer for buyer in buyers_data}
+    
     # Delete old processed transfers
     supabase.table('processed_transfers').delete().lt('timestamp', twenty_four_hours_ago.isoformat()).execute()
+    
     while True:
         data = fetch_account_history(ACCOUNT, start, limit)
         if data is None or 'result' not in data:
@@ -167,7 +196,7 @@ def add_buyers():
                 amount_value = float(transfer['amount'].split()[0])
                 amount_currency = transfer['amount'].split()[1]
                 tx_id = op_details['trx_id']
-                if supabase.table('processed_transfers').select('*').eq('tx_id', tx_id).execute().data:
+                if tx_id in processed_txs:
                     logger.info(f"Transfer {tx_id} already processed. Skipping.")
                     continue
                 if transfer['to'] == ACCOUNT:
@@ -182,10 +211,14 @@ def add_buyers():
                         send_transfer(transfer['from'], amount_value, amount_currency, f"Returning {transfer['amount']} as it is not within the acceptable threshold.")
                     else:
                         # Check if the user is already a buyer with an active subscription
-                        existing_buyer = supabase.table('buyers').select('*').eq('username', transfer['from']).gt('end_date', current_time.isoformat()).execute().data
-                        if existing_buyer:
+                        existing_buyer = buyers_set.get(transfer['from'])
+                        if existing_buyer and datetime.fromisoformat(existing_buyer['end_date']) > current_time:
                             # If the user already has an active subscription, refund them
-                            send_transfer(transfer['from'], amount_value, amount_currency, f"Returning {transfer['amount']} as your subscription is still active until {existing_buyer[0]['end_date']}.")
+                            send_transfer(transfer['from'], amount_value, amount_currency, f"Returning {transfer['amount']} as your subscription is still active until {existing_buyer['end_date']}.")
+                            supabase.table('processed_transfers').insert({
+                                'tx_id': tx_id,
+                                'timestamp': transfer_time.isoformat()
+                            }).execute()
                         else:
                             new_end_date = transfer_time + timedelta(days=days)
                             valid_buyers.append({
@@ -199,17 +232,27 @@ def add_buyers():
                                 'tx_id': tx_id,
                                 'timestamp': transfer_time.isoformat()
                             }).execute()
+                            buyers_set[transfer['from']] = {
+                                'username': transfer['from'],
+                                'start_date': transfer_time.isoformat(),
+                                'end_date': new_end_date.isoformat()
+                            }
         if data['result']:
             oldest_transaction_time = datetime.strptime(data['result'][0][1]['timestamp'], '%Y-%m-%dT%H:%M:%S')
             if oldest_transaction_time >= twenty_four_hours_ago:
                 start = data['result'][0][0]
                 continue
         break
-    old_buyers = supabase.table('buyers').select('*').lt('end_date', one_day_ago.isoformat()).execute().data
+    
+    # Handle old buyers
+    old_buyers = [buyer for buyer in buyers_set.values() if datetime.fromisoformat(buyer['end_date']) < one_day_ago]
     for old_buyer in old_buyers:
         send_transfer(old_buyer['username'], 0.001, 'HIVE', f"Your subscription to `{ACCOUNT}` has ended. Thanks for using it!")
         notify_user_on_subscription_change(old_buyer['username'], old_buyer['start_date'], old_buyer['end_date'], False)
-    supabase.table('buyers').delete().lt('end_date', one_day_ago.isoformat()).execute()
+        supabase.table('buyers').delete().eq('username', old_buyer['username']).execute()
+        buyers_set.pop(old_buyer['username'], None)
+    
+    # Upsert new buyers
     for buyer in valid_buyers:
         buyer_data = {
             'username': buyer['username'],
@@ -217,10 +260,11 @@ def add_buyers():
             'end_date': buyer['end_date']
         }
         supabase.table('buyers').upsert(buyer_data).execute()
-    active_buyers = supabase.table('buyers').select('*').execute().data
-    all_buyers = [buyer['username'] for buyer in active_buyers]
-    logger.info(f'Total active buyers: {len(all_buyers)}')
-    return all_buyers
+        buyers_set[buyer['username']] = buyer
+    
+    active_buyers = [buyer['username'] for buyer in buyers_set.values()]
+    logger.info(f'Total active buyers: {len(active_buyers)}')
+    return active_buyers
 
 # Function to calculate the number of days based on the amount transferred
 def calculate_days(amount, min_amount, max_amount):

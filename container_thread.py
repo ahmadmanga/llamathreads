@@ -7,7 +7,8 @@ from beem.comment import Comment
 from beem.exceptions import MissingKeyError
 from beemapi.exceptions import InvalidParameters
 import logging
-from dotenv import load_dotenv  # Added import for load_dotenv
+from dotenv import load_dotenv
+from supabase import create_client, Client
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', stream=sys.stdout)
@@ -19,6 +20,8 @@ load_dotenv()
 # Get environment variables
 ACCOUNT = os.getenv('ACCOUNT')
 POSTING_KEY = os.getenv('POSTING_KEY')
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 
 # Default MAIN_TAG and CONTAINER_THREAD provided directly in code
 MAIN_TAGS = ["#threadcast"]
@@ -31,6 +34,9 @@ For more info, read: https://inleo.io/threads/view/llamathreads/re-leothreads-2t
 
 
 https://img.inleo.io/DQmeVDFM7F3F6jmRhWpwsFYGHuPPrTjpttPUBX1xMujMyMC/VeniceAI_0hBbOYe_Square.jpg"""
+
+# Initialize Supabase client
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def get_latest_post(author):
     hive = Hive(node='https://api.hive.blog')
@@ -151,8 +157,46 @@ def post_container_thread(parent_post, container_thread_text):
         logger.error(f"An error occurred while posting the container thread: {e}")
         logger.debug(str(e))
 
+def get_last_container_thread_check():
+    try:
+        response = supabase.table('llamathreads_data').select('*').eq('_id', 'last_container_thread_check').execute()
+        data = response.data
+        if data and len(data) > 0 and 'value' in data[0]:
+            last_check = data[0]['value']
+            try:
+                return datetime.fromisoformat(last_check)
+            except ValueError:
+                logger.warning("Stored last check value is not a valid datetime. Treating as if no check has been done.")
+                return None
+        else:
+            logger.info("No previous check found.")
+            return None
+    except Exception as e:
+        logger.error(f"Error fetching last check time from Supabase: {e}")
+        logger.debug(str(e))
+        return None
+
+def update_last_container_thread_check():
+    current_time = datetime.utcnow().isoformat()
+    try:
+        response = supabase.table('llamathreads_data').upsert({'_id': 'last_container_thread_check', 'value': current_time}).execute()
+        if response.error:
+            logger.error(f"Error updating last check time in Supabase: {response.error}")
+        else:
+            logger.info("Last check time updated successfully.")
+    except Exception as e:
+        logger.error(f"Error updating last check time in Supabase: {e}")
+        logger.debug(str(e))
+
 def container_thread_creator():
     logger.info("Starting Hive Container Thread application...")
+    # Check last container thread check time
+    last_check = get_last_container_thread_check()
+    current_time = datetime.utcnow()
+    if last_check and current_time - last_check < timedelta(hours=2):
+        logger.info("Container thread check performed in the last 2 hours. Skipping check.")
+        return
+
     # Get the latest post by leothreads
     latest_post = get_latest_post('leothreads')
     if not latest_post:
@@ -168,3 +212,8 @@ def container_thread_creator():
         logger.info("No container thread found. Creating a new one...")
         post_container_thread(latest_post, CONTAINER_THREAD)
     logger.info("Application completed.")
+    # Update the last container thread check time
+    update_last_container_thread_check()
+
+if __name__ == "__main__":
+    container_thread_creator()
