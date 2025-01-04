@@ -9,6 +9,7 @@ import logging
 import requests
 import json
 import re
+import time  # Import the time module to use time.sleep()
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', stream=sys.stdout)
@@ -98,6 +99,9 @@ def post_reply(parent_comment, reply_text):
             json_metadata={"app": "leothreads/0.3"}  # Use Leothreads interface for posting to the blockchain
         )
         logger.info(f"Reply posted successfully: {result}")
+        print("waiting for blockchain...")
+        time.sleep(3)  # Wait for 3 seconds
+        print("continuing...")
     except MissingKeyError:
         logger.error("Missing posting key. Please check your POSTING_KEY in the .env file.")
     except Exception as e:

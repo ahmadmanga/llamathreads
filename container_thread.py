@@ -148,8 +148,18 @@ def post_container_thread(parent_post, container_thread_text):
             author=ACCOUNT,
             permlink=permlink,
             reply_identifier=f"{parent_post.author}/{parent_post.permlink}",
-            json_metadata={"app": "leothreads/0.3"}  # Change this line to use "leothreads/0.3"
-        )
+            json_metadata={
+                "app": "leothreads/0.3",
+                "canonical_url": "https://inleo.io/threads/view/{permlink}",
+                "dimensions": {},
+                "format": "markdown",
+                "images": [],
+                "isPoll": false,
+                "links": [],
+                "pollOptions": {},
+                "tags": ["leofinance"]
+                }  # Change this to have the same meta-patterns of other threadcasts "leothreads/0.3"
+                )
         logger.info(f"Container thread posted successfully: {result}")
     except MissingKeyError:
         logger.error("Missing posting key. Please check your POSTING_KEY in the .env file.")
