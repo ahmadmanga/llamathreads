@@ -6,7 +6,7 @@ from reply import talk_to_gpt, post_reply, fetch_comment_chain
 from leosub import list_all_users  # Import the list_all_users function
 from container_thread import container_thread_creator  # Added import for container_thread_creator
 from datetime import datetime
-import logging
+import logging  # Configure logging
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', stream=sys.stdout)
@@ -53,15 +53,20 @@ def main():
             # Fetch comments within the valid block range
             comments = listen_for_comments(last_block, end_block)
             for comment in comments:
-                print(f"Fetched comment by @{comment['author']} on {comment['block_timestamp']}: {comment['body']}")
+                # Ensure the comment body is encoded in UTF-8
+                comment_body = comment['body'].encode('utf-8', errors='replace').decode('utf-8')
+                print(f"Fetched comment by @{comment['author']} on {comment['block_timestamp']}: {comment_body}")
+
                 # Check if the commenter is a subscriber
                 if comment['author'] in all_users:
-                    # Fetch the comment chain
+                    # Fetch the comment chain messages
                     messages = fetch_comment_chain(comment)
+
                     # Generate a response using the AI
                     system_prompt = None
-                    prompt = comment['body']
+                    prompt = comment_body
                     response = talk_to_gpt(prompt, system_prompt=None, messages=messages)
+
                     if response:
                         reply_text = response  # Directly use the response text
                         # Post the reply to the Hive blockchain
@@ -71,19 +76,23 @@ def main():
                         post_reply(comment, INSTRUCTIONAL_MESSAGE)
                 else:
                     post_reply(comment, INSTRUCTIONAL_MESSAGE)
+
             # Update the block range for the next iteration
             last_block = end_block + 1
             end_block = last_block + BLOCK_RANGE - 1
             latest_block_num = get_latest_block_num()
             if latest_block_num < end_block:
                 end_block = latest_block_num
+
             # Save last_block before exiting if reached the latest block
             save_last_block(last_block)
             logger.info(f"Updated last_block: {last_block}, end_block: {end_block}, latest_block_num: {latest_block_num}")
             if last_block == latest_block_num:
                 print("Last block is the same as the latest block. Exiting the application.")
                 save_last_block(last_block)
-                break  # Quit the loop to exit
+                break
+
+            # Quit the loop to exit
         except Exception as e:
             print(f"An error occurred: {e}")
             quit_if_timeout()

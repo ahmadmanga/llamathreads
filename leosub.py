@@ -114,7 +114,14 @@ def update_subscribers(valid_transfers):
             'username': transfer['username'],
             'timestamp': transfer['timestamp'].isoformat()
         }
-        supabase.table('subscribers').upsert(subscriber_data).execute()
+        # Check if the username already exists
+        existing_subscriber = supabase.table('subscribers').select('*').eq('username', transfer['username']).execute().data
+        if existing_subscriber:
+            # If the username exists, update the timestamp
+            supabase.table('subscribers').update({'timestamp': transfer['timestamp'].isoformat()}).eq('username', transfer['username']).execute()
+        else:
+            # Otherwise, insert the new subscriber
+            supabase.table('subscribers').insert(subscriber_data).execute()
 
 # Function to get the list of subscribers
 def subscribers_list(subscription_payment_account, creator_sub_acc):
@@ -174,18 +181,24 @@ def add_buyers():
                     if days == 0:
                         send_transfer(transfer['from'], amount_value, amount_currency, f"Returning {transfer['amount']} as it is not within the acceptable threshold.")
                     else:
-                        new_end_date = transfer_time + timedelta(days=days)
-                        valid_buyers.append({
-                            'username': transfer['from'],
-                            'start_date': transfer_time.isoformat(),
-                            'end_date': new_end_date.isoformat()
-                        })
-                        send_transfer(transfer['from'], 0.001, 'HIVE', f"Congrats! You're now subscribed for {days} day(s) to {ACCOUNT}'s services!")
-                        notify_user_on_subscription_change(transfer['from'], transfer_time, new_end_date, True)
-                        supabase.table('processed_transfers').insert({
-                            'tx_id': tx_id,
-                            'timestamp': transfer_time.isoformat()
-                        }).execute()
+                        # Check if the user is already a buyer with an active subscription
+                        existing_buyer = supabase.table('buyers').select('*').eq('username', transfer['from']).gt('end_date', current_time.isoformat()).execute().data
+                        if existing_buyer:
+                            # If the user already has an active subscription, refund them
+                            send_transfer(transfer['from'], amount_value, amount_currency, f"Returning {transfer['amount']} as your subscription is still active until {existing_buyer[0]['end_date']}.")
+                        else:
+                            new_end_date = transfer_time + timedelta(days=days)
+                            valid_buyers.append({
+                                'username': transfer['from'],
+                                'start_date': transfer_time.isoformat(),
+                                'end_date': new_end_date.isoformat()
+                            })
+                            send_transfer(transfer['from'], 0.001, 'HIVE', f"Congrats! You're now subscribed for {days} day(s) to {ACCOUNT}'s services!")
+                            notify_user_on_subscription_change(transfer['from'], transfer_time, new_end_date, True)
+                            supabase.table('processed_transfers').insert({
+                                'tx_id': tx_id,
+                                'timestamp': transfer_time.isoformat()
+                            }).execute()
         if data['result']:
             oldest_transaction_time = datetime.strptime(data['result'][0][1]['timestamp'], '%Y-%m-%dT%H:%M:%S')
             if oldest_transaction_time >= twenty_four_hours_ago:
