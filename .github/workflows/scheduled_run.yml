@@ -21,6 +21,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Set UTF-8 Console Encoding
+        run: |
+          $OutputEncoding = [System.Text.Encoding]::UTF8
+          [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          [System.Console]::InputEncoding = [System.Text.Encoding]::UTF8
+        shell: pwsh
+
       - name: Run main.py
         env:
           ACCOUNT: ${{ secrets.ACCOUNT }}
@@ -32,4 +39,6 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           API_KEY: ${{ secrets.API_KEY }}
         run: |
+          $env:PYTHONIOENCODING="utf-8"
           python main.py
+        shell: pwsh
