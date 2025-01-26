@@ -67,7 +67,7 @@ def post_container_thread(parent_post, container_thread_text):
     hive = Hive(node='https://api.hive.blog', keys=[POSTING_KEY])
     try:
         # Generate a unique permlink for your comment and convert it to lowercase
-        permlink = f"re-{parent_post.author}-{parent_post.permlink}-{datetime.utcnow().strftime('%Y%m%dT%H%M%S%f')}"
+        permlink = f"re-{parent_post.author}-{datetime.utcnow().strftime('%Y%m%dT%H')}"
         permlink = permlink.lower()
         result = hive.post(
             title="",  # Leave empty for a comment
