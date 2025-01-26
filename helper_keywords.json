@@ -1,0 +1,30 @@
+{
+    "keywords": [
+        {
+            "keywords": ["climate change", "global warming"],
+            "message": "Climate change is a global issue affecting the planet's weather patterns, ecosystems, and human societies. It is primarily driven by the increase in greenhouse gas emissions, mainly carbon dioxide, due to human activities like burning fossil fuels.",
+            "priority": "HIGH"
+        },
+        {
+                    "keywords": ["earn", "leo"],
+            "message": "### How to Earn $LEO Token?\n*$LEO Token can be earned by engaging in the platform and recieving upvotes from users who have LEO Stake on the platform. For more information visit: https://docs.inleo.io/the-leo-token-economy/tokenomics",
+            "priority": "MID"
+        },
+        
+        {
+            "keywords": ["buy", "leo", "hive"],
+            "message": "There are three official coins for inleo.io. They're LEO, HIVE and HBD. \n### How to Buy LEO?\n*Leodex.io\n*Buy `bLEO` from Uniswap\n*https://hive-engine.com/trade/LEO",
+            "priority": "MID"
+        },
+        {
+            "keywords": ["freecompliments"],
+            "message": "#freecompliments is a huge community on inleo where you can talk about any topic.\nIt's managed by @freecompliments curation account.",
+            "priority": "HIGH"
+        },
+        {
+            "keywords": ["keystore"],
+            "message": "### How to Open Keystore Wallet?\n You can create Keystore Wallet by singing up to inleo and choosing 'Create Wallet with Keychain' option: \n\n### How to Import Keystore Wallet to Keychain?\n HIVE Keychain is a wallet that can be used to login to many HIVE applications via browser or Mobile App. If you have the 12-word secret phrase of your Keystore account, it is your account's Master Password. Import your account by choosing 'Use keys/password' option on Hive Keychain Wallet, and paste your 12-word secret phrase. More info: https://hive-keychain.com/",
+            "priority": "MID"
+        }
+    ]
+}

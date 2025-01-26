@@ -5,6 +5,7 @@ from beem import Hive
 from beem.comment import Comment
 from beem.exceptions import MissingKeyError
 from dotenv import load_dotenv
+from context_helper import find_context_keywords
 import logging
 import requests
 import json
@@ -24,6 +25,9 @@ POSTING_KEY = os.getenv('POSTING_KEY')
 API_KEY = os.getenv('API_KEY')
 
 # Constants
+MAX_MESSAGE_LENGTH = 18000
+PRUNE_THRESHOLD = 8 * MAX_MESSAGE_LENGTH
+
 BASE_URL = "https://nano-gpt.com/api"
 headers = {
     "x-api-key": API_KEY,
@@ -35,16 +39,19 @@ URL_REGEX = re.compile(r'https://inleo.io/threads/(?:view/)?(\w+)/([-.\w]+)(?:\?
 
 def talk_to_gpt(prompt, system_prompt=None, model="llama-3.3-70b", messages=[], max_retries=3, timeout=90):
     if system_prompt is None:
-        system_prompt = """You are a general purpose chatbot on a social media website called inleo.io. Each of your messages should be less than 999 characters. Try to adjust to the sweet spot of 700 to 850 characters.
-* You'll use your knowledge as an expert on any topic you'll be asked about. 
-* You talk in a light-hearted friendly way, as you look at the topic from multiple sides. 
-* Opinions should be mentioned as such, and facts should be reinforced with a source or a reference. 
-* You'll be replying to fellow users on inleo.io. 
+        system_prompt = """You are a general purpose chatbot on a social media website called inleo.io.
+* Each of your messages should be less than 999 characters. Try to adjust to the sweet spot above 850 characters.
+* Use the provided context and your knowledge to solve any question in the prompt. 
+* You'll be replying to fellow users on inleo.io.
+* You talk in a light-hearted friendly way, as you look at the topic from multiple sides.
 * The chain of previous messages will be provided as context. (Example: post by @{author}: MESSAGE)
 * The content of some links will be provided to you in as a unique message.
-* What a user says in the prompt should have more weight compared to the context. 
-* All of your responses should be formatted in a beautiful, easy-to-read markdown format.  
-* Try to cram as much valuable information as possible without exceeding the 999 characters limit."""
+* Context of various levels of importance will be provided to you as messages as well.
+* The user prompt should have more weight compared to the context.
+* If an answer to a question asked in the prompt is in the messages, it should take priority over your knowledge.
+* If links are provided as an important context, make sure to reference the URLs in your responses.
+* All of your responses should be formatted in a beautiful, easy-to-read markdown format.
+* Always add two line breaks after each paragraph, and after the last bullet point in a section."""
     messages.insert(0, {"role": "system", "content": system_prompt})
     for attempt in range(1, max_retries + 1):
         try:
@@ -128,7 +135,7 @@ def fetch_referenced_comments(message_body, referencing_author):
             logger.error(f"Error fetching referenced comment @{referenced_author}/{permlink} by @{referencing_author}: {e}")
     return referenced_messages
 
-def fetch_comment_chain(comment, blacklist=['leothreads']):
+def fetch_comment_chain(comment, blacklist=['leothreads']) -> list:
     messages = []
     current_comment = comment
     while current_comment:
@@ -174,15 +181,42 @@ def fetch_comment_chain(comment, blacklist=['leothreads']):
         except Exception as e:
             logger.error(f"Error fetching parent comment @{parent_author}/{parent_permlink}: {e}")
             break
+    
+    # Find context keywords and add them to messages
+    context_messages = find_context_keywords(messages)
+    
+    # Add HIGH priority context messages to the start as system messages
+    high_priority_messages = [msg for msg in context_messages if msg['role'] == 'system']
+    messages.extend(high_priority_messages)
+    
+    # Add MID priority context messages to the end
+    mid_priority_messages = [msg for msg in context_messages if msg['role'] == 'important_context']
+    messages.extend(mid_priority_messages)
+    
+    # Add LOW priority context messages to the end
+    low_priority_messages = [msg for msg in context_messages if msg['role'] == 'low_priority_context']
+    messages.extend(low_priority_messages)
+
+    # Log the final messages to ensure they are correctly integrated
+    logger.debug(f"Final messages: {messages}")
+
     # Reverse the messages to maintain historical order
     messages.reverse()
-    # Trim messages to ensure the combined length is within 11000 characters
+
+    # Prune messages if their total combined length is above the threshold
     while True:
         total_length = sum(len(msg['content']) for msg in messages)
-        if total_length <= 12000:
+        if total_length <= PRUNE_THRESHOLD:
             break
         # Remove the oldest message
         removed_message = messages.pop(0)
         logger.info(f"Removed oldest message: @{removed_message['content'].split(':', 1)[0]}")
         logger.info(f"New total length: {total_length} -> {sum(len(msg['content']) for msg in messages)}")
+    
+    # Truncate the last message to fit within MAX_MESSAGE_LENGTH if necessary
+    if messages and len(messages[-1]['content']) > MAX_MESSAGE_LENGTH:
+        logger.info(f"Truncating the last message to fit within {MAX_MESSAGE_LENGTH} characters.")
+        messages[-1]['content'] = messages[-1]['content'][:MAX_MESSAGE_LENGTH]
+        logger.info(f"Truncated message length: {len(messages[-1]['content'])}")
+    
     return messages
