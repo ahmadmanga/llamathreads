@@ -39,102 +39,29 @@ https://img.inleo.io/DQmeVDFM7F3F6jmRhWpwsFYGHuPPrTjpttPUBX1xMujMyMC/VeniceAI_0h
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def get_latest_post(author):
-    hive = Hive(node='https://api.hive.blog')
-    account = Account(author, hive_instance=hive)
-    latest_post = None
-    for post in account.get_blog():
-        latest_post = post
-        break
-    return latest_post
+    try:
+        hive = Hive(node='https://api.hive.blog')
+        account = Account(author, hive_instance=hive)
+        latest_post = None
+        for post in account.get_blog(limit=1):  # Limit to 1 to get the latest post
+            latest_post = post
+            logger.info(f"Retrieved post: {post}")
+            break
+        if latest_post is None:
+            logger.info(f"No posts found for account: {author}")
+        return latest_post
+    except MissingKeyError:
+        logger.error("Missing posting key. Please check your environment variables.")
+    except Exception as e:
+        logger.error(f"An error occurred while fetching the latest post: {e}")
+        logger.debug(str(e))
+    return None
 
 def make_naive(dt):
     """Convert an offset-aware datetime to offset-naive."""
     if dt.tzinfo is not None:
         dt = dt.astimezone().replace(tzinfo=None)
     return dt
-
-def check_container_thread_exists(account, tags, start_time):
-    start_time = make_naive(start_time)  # Ensure start_time is offset-naive
-    comments_checked = 0
-    comments_skipped = 0
-    error_count = 0
-    limit = 100
-    last_permlink = None
-    c_list = {}
-    while True:
-        logger.info(f"Starting history search with limit {limit} from permlink {last_permlink}...")
-        if last_permlink:
-            history = list(account.comment_history(limit=limit, start_permlink=last_permlink))
-        else:
-            history = list(account.comment_history(limit=limit))
-        if not history:
-            logger.info("No more comments in history.")
-            break
-        # Ensure 'created' is a datetime object
-        sorted_history = sorted(history, key=lambda x: make_naive(x['created']), reverse=True)
-        for op in sorted_history:
-            comments_checked += 1
-            authorperm = f"@{op['author']}/{op['permlink']}"
-            permalink = op['permlink']
-            if permalink in c_list:
-                comments_skipped += 1
-                log_message = f"Checked: {comments_checked}, Skipped: {comments_skipped}, Error: {error_count}, Current: {authorperm}"
-                sys.stdout.write(f"\r{log_message}")
-                sys.stdout.flush()
-                continue
-            try:
-                comment = Comment(authorperm)
-                comment.refresh()
-            except InvalidParameters as e:
-                comments_skipped += 1
-                log_message = f"Checked: {comments_checked}, Skipped: {comments_skipped}, Error: {error_count}, Current: {authorperm}"
-                sys.stdout.write(f"\r{log_message}")
-                sys.stdout.flush()
-                logger.warning(f"Invalid Parameters for {authorperm}. Skipping.")
-                logger.debug(str(e))
-                continue
-            except Exception as e:
-                if 'content does not exist' in str(e).lower() or 'invalid parameters' in str(e).lower():
-                    comments_skipped += 1
-                    log_message = f"Checked: {comments_checked}, Skipped: {comments_skipped}, Error: {error_count}, Current: {authorperm}"
-                    sys.stdout.write(f"\r{log_message}")
-                    sys.stdout.flush()
-                    logger.warning(f"Content does not exist for {authorperm}. Skipping.")
-                    logger.debug(str(e))
-                    continue
-                error_count += 1
-                log_message = f"Checked: {comments_checked}, Skipped: {comments_skipped}, Error: {error_count}, Current: {authorperm}"
-                sys.stdout.write(f"\r{log_message}")
-                sys.stdout.flush()
-                logger.error(f"Error for {authorperm}.")
-                logger.debug(str(e))
-                continue
-            c_list[comment.permlink] = 1
-            if comment.is_comment():
-                body = comment.body
-                timestamp = make_naive(comment['created'])  # Ensure timestamp is offset-naive
-                parent_author = comment.parent_author
-                if timestamp < start_time:
-                    logger.info("Reached comments older than 24 hours. Stopping.")
-                    logger.info(f"Checked: {comments_checked}, Skipped: {comments_skipped}, Error: {error_count}, Current: {authorperm}")
-                    return False
-                if timestamp >= start_time:
-                    if parent_author == 'leothreads':
-                        for tag in tags:
-                            if tag in body:
-                                logger.info("Found container thread.")
-                                logger.info(f"Checked: {comments_checked}, Skipped: {comments_skipped}, Error: {error_count}, Current: {authorperm}")
-                                return True
-                log_message = f"Checked: {comments_checked}, Skipped: {comments_skipped}, Error: {error_count}, Current: {authorperm}"
-                sys.stdout.write(f"\r{log_message}")
-                sys.stdout.flush()
-        # Update last_permlink to the last entry in the current batch
-        last_permlink = sorted_history[-1]['permlink']
-        # Adjust limit for the next iteration
-        limit *= 3
-    logger.info("Complete. No container thread found.")
-    logger.info(f"Checked: {comments_checked}, Skipped: {comments_skipped}, Error: {error_count}")
-    return False
 
 def post_container_thread(parent_post, container_thread_text):
     hive = Hive(node='https://api.hive.blog', keys=[POSTING_KEY])
@@ -154,7 +81,7 @@ def post_container_thread(parent_post, container_thread_text):
                 "dimensions": {},
                 "format": "markdown",
                 "images": [],
-                "isPoll": false,
+                "isPoll": "false",
                 "links": [],
                 "pollOptions": {},
                 "tags": ["leofinance"]
@@ -167,63 +94,79 @@ def post_container_thread(parent_post, container_thread_text):
         logger.error(f"An error occurred while posting the container thread: {e}")
         logger.debug(str(e))
 
-def get_last_container_thread_check():
+def get_last_container_thread_post_time():
     try:
         response = supabase.table('llamathreads_data').select('*').eq('_id', 'last_container_thread_check').execute()
         data = response.data
         if data and len(data) > 0 and 'value' in data[0]:
-            last_check = data[0]['value']
+            last_post = data[0]['value']
             try:
-                return datetime.fromisoformat(last_check)
+                print(f"returning {last_post}")
+                return datetime.fromisoformat(last_post)
             except ValueError:
-                logger.warning("Stored last check value is not a valid datetime. Treating as if no check has been done.")
+                logger.warning("Stored last post value is not a valid datetime. Treating as if no check has been made.")
                 return None
         else:
-            logger.info("No previous check found.")
+            logger.info("No previous post time found.")
             return None
     except Exception as e:
-        logger.error(f"Error fetching last check time from Supabase: {e}")
+        logger.error(f"Error fetching last post time from Supabase: {e}")
         logger.debug(str(e))
         return None
 
-def update_last_container_thread_check():
+def update_last_container_thread_post_time():
     current_time = datetime.utcnow().isoformat()
     try:
         response = supabase.table('llamathreads_data').upsert({'_id': 'last_container_thread_check', 'value': current_time}).execute()
-        if response.error:
-            logger.error(f"Error updating last check time in Supabase: {response.error}")
+        if response.status_code == 201 or response.status_code == 200:
+            logger.info("Last post time updated successfully.")
         else:
-            logger.info("Last check time updated successfully.")
+            logger.error(f"Error updating last post time in Supabase: {response.status_code} - {response.message}")
     except Exception as e:
-        logger.error(f"Error updating last check time in Supabase: {e}")
+        logger.error(f"Exception updating last post time in Supabase: {str(e)}")
         logger.debug(str(e))
 
 def container_thread_creator():
     logger.info("Starting Hive Container Thread application...")
-    # Check last container thread check time
-    last_check = get_last_container_thread_check()
+    
+    # Get last post time from Supabase
+    last_post_time = get_last_container_thread_post_time()
     current_time = datetime.utcnow()
-    if last_check and current_time - last_check < timedelta(hours=2):
-        logger.info("Container thread check performed in the last 2 hours. Skipping check.")
+    
+    # If we can't access Supabase, skip the process
+    if last_post_time is None:
+        logger.error("Could not access Supabase. Skipping container thread creation.")
         return
+    else:
+       print(f"last_post_time is not None: {last_post_time}")
+
+    # Only post if it's been more than 24 hours since the last post
+    current_time = make_naive(current_time)
+    last_post_time = make_naive(last_post_time)
+    time_difference = current_time - last_post_time
+    is_post_recent = time_difference < timedelta(hours=24)
+    if is_post_recent:
+        logger.info("Container thread posted too recently. Skipping.")
+        return
+    else:
+       print(f"Another Step Done: {time_difference}")
 
     # Get the latest post by leothreads
     latest_post = get_latest_post('leothreads')
     if not latest_post:
         logger.error("Failed to fetch the latest post by leothreads.")
         return
+    
     logger.info(f"Latest post by leothreads: {latest_post.permlink}")
-    # Check if a container thread already exists in the last 24 hours
-    account = Account(ACCOUNT, hive_instance=Hive(node='https://api.hive.blog'))
-    start_time = datetime.now() - timedelta(days=1)
-    if check_container_thread_exists(account, MAIN_TAGS, start_time):
-        logger.info("Container thread already exists.")
-    else:
-        logger.info("No container thread found. Creating a new one...")
-        post_container_thread(latest_post, CONTAINER_THREAD)
+    
+    # Post a new container thread
+    logger.info("Posting new container thread...")
+    post_container_thread(latest_post, CONTAINER_THREAD)
+    
+    # Update the last post time in Supabase
+    update_last_container_thread_post_time()
+    
     logger.info("Application completed.")
-    # Update the last container thread check time
-    update_last_container_thread_check()
 
 if __name__ == "__main__":
     container_thread_creator()
